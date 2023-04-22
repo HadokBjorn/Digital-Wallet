@@ -7,5 +7,9 @@
 	},
 	"editor.formatOnSave": true,
 	"cSpell.enableFiletypes": ["javascript"],
-	"cSpell.language": "en,pt,pt_BR"
+	"cSpell.language": "en,pt,pt_BR",
+	"editor.indentSize": "tabSize",
+	"editor.tokenColorCustomizations": {
+		"comments": "#f30909"
+	}
 }
