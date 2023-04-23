@@ -5,6 +5,7 @@ import express, { json } from "express";
 import joi from "joi";
 import { MongoClient, ObjectId } from "mongodb";
 import { stripHtml } from "string-strip-html";
+import { v4 as uuid } from "uuid";
 
 const app = express();
 const PORT = 5000;
@@ -22,22 +23,44 @@ try {
 }
 const db = mongoClient.db();
 
-//Estrutura de cadastro {name, email, password}
+const userSchema = joi.object({
+	name: joi.string().required(),
+	email: joi
+		.string()
+		.email({ minDomainSegments: 2, tlds: { allow: ["com", "net"] } })
+		.required(),
+	password: joi.string().min(3).pattern(new RegExp("^[a-zA-Z0-9]{3,30}$")).required(),
+});
+
+const loginSchema = joi.object({
+	email: joi
+		.string()
+		.email({ minDomainSegments: 2, tlds: { allow: ["com", "net"] } })
+		.required(),
+	password: joi.string().min(3).pattern(new RegExp("^[a-zA-Z0-9]{3,30}$")).required(),
+});
 
 app.post("/cadastro", async (req, res) => {
-	const { name, email, password } = req.body;
+	const name = stripHtml(req.body.name).result.trim();
+	const email = stripHtml(req.body.email).result.trim();
+	const password = stripHtml(req.body.password).result.trim();
+
+	const validation = userSchema.validate({ name, email, password }, { abortEarly: false });
+
+	if (validation.error) {
+		const errors = validation.error.details.map((detail) => detail.message);
+		return res.status(422).send(errors);
+	}
+
 	try {
-		const findUser = await db.collection("cadastro").findOne({ email });
-		if (findUser) return res.status(409).send("E-mail já cadastrado!");
+		const doubleUser = await db.collection("usuarios").findOne({ email });
+		if (doubleUser) return res.status(409).send("E-mail já cadastrado!");
 		const hash = bcrypt.hashSync(password, 10);
-		await db.collection("usuario").insertOne({ name, email, password: hash });
+		await db.collection("usuarios").insertOne({ name, email, password: hash });
+		res.sendStatus(201);
 	} catch (err) {
 		res.status(500).send(err);
 	}
 });
-
-//Estrutura de Login {email e password}
-
-//Blocos de código do projeto
 
 app.listen(PORT, () => print(`Server online in port: ${PORT}`));
