@@ -63,4 +63,27 @@ app.post("/cadastro", async (req, res) => {
 	}
 });
 
+app.post("/", async (req, res) => {
+	const email = stripHtml(req.body.email).result.trim();
+	const password = stripHtml(req.body.password).result.trim();
+	const validation = loginSchema.validate({ email, password }, { abortEarly: false });
+
+	if (validation.error) {
+		const errors = validation.error.details.map((detail) => detail.message);
+		return res.status(422).send(errors);
+	}
+
+	try {
+		const findUser = await db.collection("usuarios").findOne({ email });
+		if (!findUser) return res.status(404).send("E-mail não cadastrado!");
+		const isPassword = bcrypt.compareSync(password, findUser.password);
+		if (!isPassword) return res.status(401).send("Senha incorreta!");
+		const token = uuid();
+		await db.collection("sessoes").insertOne({ idUser: findUser._id, token });
+		res.status(200).send(token);
+	} catch (err) {
+		res.status(500).send(err);
+	}
+});
+
 app.listen(PORT, () => print(`Server online in port: ${PORT}`));
