@@ -9,7 +9,7 @@ import { v4 as uuid } from "uuid";
 import dayjs from "dayjs";
 
 const app = express();
-const PORT = 5000;
+const PORT = process.env.PORT || 5000;
 const print = (value) => console.log(value);
 app.use(json());
 app.use(cors());
@@ -22,7 +22,7 @@ try {
 } catch (err) {
 	print(err.message);
 }
-const db = mongoClient.db();
+const db = mongoClient.db("DigitalWallet");
 
 const userSchema = joi.object({
 	name: joi.string().required(),
