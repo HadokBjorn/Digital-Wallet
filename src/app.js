@@ -6,6 +6,7 @@ import joi from "joi";
 import { MongoClient, ObjectId } from "mongodb";
 import { stripHtml } from "string-strip-html";
 import { v4 as uuid } from "uuid";
+import dayjs from "dayjs";
 
 const app = express();
 const PORT = 5000;
@@ -40,6 +41,19 @@ const loginSchema = joi.object({
 	password: joi.string().min(3).pattern(new RegExp("^[a-zA-Z0-9]{3,30}$")).required(),
 });
 
+const transactionSchema = joi.object({
+	value: joi.number().precision(2).min(0.01).required(),
+	type: joi.string().valid("entrada").valid("saida").required(),
+});
+
+const SomaArray = (arr) => {
+	let soma = 0;
+	for (let i = 0; i < arr.length; i++) {
+		soma += arr[i].value;
+	}
+	return soma;
+};
+
 app.post("/cadastro", async (req, res) => {
 	const name = stripHtml(req.body.name).result.trim();
 	const email = stripHtml(req.body.email).result.trim();
@@ -63,7 +77,7 @@ app.post("/cadastro", async (req, res) => {
 	}
 });
 
-app.post("/", async (req, res) => {
+app.post("/login", async (req, res) => {
 	const email = stripHtml(req.body.email).result.trim();
 	const password = stripHtml(req.body.password).result.trim();
 	const validation = loginSchema.validate({ email, password }, { abortEarly: false });
@@ -86,4 +100,53 @@ app.post("/", async (req, res) => {
 	}
 });
 
+app.get("/movimentacoes", async (req, res) => {
+	const { authorization } = req.headers;
+	const token = authorization?.replace("Bearer ", "");
+	if (!token) return res.status(401).send("Token não encontrado!");
+	try {
+		const loggedUser = await db.collection("sessoes").findOne({ token });
+		if (!loggedUser) return res.status(401).send("Token expirado ou inválido");
+		const dateUser = await db.collection("usuarios").findOne({ _id: loggedUser.idUser });
+		if (!dateUser) return res.status(500).send("Erro ao encontrar dados");
+		const transactionUser = await db
+			.collection("transacoes")
+			.find({ user: loggedUser.idUser })
+			.toArray();
+		const entradas = transactionUser.filter((el) => el.type === "entrada");
+		const saidas = transactionUser.filter((el) => el.type === "saida");
+
+		const balance = SomaArray(entradas) - SomaArray(saidas);
+
+		delete dateUser.email;
+		delete dateUser.password;
+		res.send({ name: dateUser.name, transactions: transactionUser, totalBalance: balance });
+	} catch (err) {
+		res.status(500).send(err);
+	}
+});
+
+app.post("/transacao", async (req, res) => {
+	const { authorization } = req.headers;
+	const value = Number(stripHtml(req.body.value).result.trim());
+	const type = stripHtml(req.body.type).result.trim();
+	const validation = transactionSchema.validate({ value, type }, { abortEarly: false });
+
+	if (validation.error) {
+		const errors = validation.error.details.map((detail) => detail.message);
+		return res.status(422).send(errors);
+	}
+	const token = authorization?.replace("Bearer ", "");
+	if (!token) return res.status(401).send("Token não encontrado!");
+	try {
+		const loggedUser = await db.collection("sessoes").findOne({ token });
+		if (!loggedUser) return res.status(401).send("Token expirado ou inválido");
+		const transaction = await db
+			.collection("transacoes")
+			.insertOne({ user: loggedUser.idUser, value, type, date: dayjs().format("DD/MM") });
+		res.sendStatus(201);
+	} catch (err) {
+		res.status(500).send(err);
+	}
+});
 app.listen(PORT, () => print(`Server online in port: ${PORT}`));
