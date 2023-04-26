@@ -44,6 +44,7 @@ const loginSchema = joi.object({
 const transactionSchema = joi.object({
 	value: joi.number().precision(2).min(0.01).required(),
 	type: joi.string().valid("entrada").valid("saida").required(),
+	title: joi.string().min(3).required(),
 });
 
 const SomaArray = (arr) => {
@@ -120,7 +121,11 @@ app.get("/movimentacoes", async (req, res) => {
 
 		delete dateUser.email;
 		delete dateUser.password;
-		res.send({ name: dateUser.name, transactions: transactionUser, totalBalance: balance });
+		res.send({
+			name: dateUser.name,
+			transactions: transactionUser.reverse(),
+			totalBalance: balance,
+		});
 	} catch (err) {
 		res.status(500).send(err);
 	}
@@ -130,7 +135,8 @@ app.post("/transacao", async (req, res) => {
 	const { authorization } = req.headers;
 	const value = Number(stripHtml(req.body.value).result.trim());
 	const type = stripHtml(req.body.type).result.trim();
-	const validation = transactionSchema.validate({ value, type }, { abortEarly: false });
+	const title = stripHtml(req.body.title).result.trim();
+	const validation = transactionSchema.validate({ value, type, title }, { abortEarly: false });
 
 	if (validation.error) {
 		const errors = validation.error.details.map((detail) => detail.message);
@@ -143,7 +149,7 @@ app.post("/transacao", async (req, res) => {
 		if (!loggedUser) return res.status(401).send("Token expirado ou inválido");
 		const transaction = await db
 			.collection("transacoes")
-			.insertOne({ user: loggedUser.idUser, value, type, date: dayjs().format("DD/MM") });
+			.insertOne({ user: loggedUser.idUser, value, type, title, date: dayjs().format("DD/MM") });
 		res.sendStatus(201);
 	} catch (err) {
 		res.status(500).send(err);
